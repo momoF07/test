@@ -1,0 +1,16 @@
+.main-header {
+    background-color: #003399;
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+    color: white;
+    font-family: 'Arial', sans-serif;
+}
+
+/* Personnaliser les boutons Streamlit */
+.stButton>button {
+    width: 100%;
+    border-radius: 20px;
+    background-color: #ff4b4b;
+    color: white;
+}
