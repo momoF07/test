@@ -78,7 +78,13 @@ def main():
         # --- RÉSUMÉ (METRICS) ---
         total_open = len(df[df['Statut'] == "Ouvert"])
         total_closed = len(df[df['Statut'] == "Interrompu"])
-        avg_wait = int(df[df['Statut'] == "Ouvert"]['Attente'].mean())
+        # On calcule la moyenne seulement s'il y a des attractions ouvertes
+        open_rides = df[df['Statut'] == "Ouvert"]
+        
+        if not open_rides.empty:
+            avg_wait = int(open_rides['Attente'].mean())
+        else:
+            avg_wait = 0 # Ou une autre valeur par défaut si tout est fermé
 
         m1, m2, m3 = st.columns(3)
         m1.metric("Attractions Ouvertes", f"{total_open}/{len(df)}")
