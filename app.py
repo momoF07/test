@@ -1,136 +1,144 @@
 import streamlit as st
-import requests
 import pandas as pd
+import requests
 import plotly.express as px
-from datetime import datetime
+from datetime import datetime, time
+import pytz
 
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(
-    page_title="Disney Live Tracker",
-    page_icon="🎢",
-    layout="wide"
+    page_title="Disney Live Board Pro",
+    page_icon="🏰",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# --- STYLE CSS PERSONNALISÉ ---
+# --- CONSTANTES & CONFIG ---
+PARIS_TZ = pytz.timezone('Europe/Paris')
+DLP_CLOSING = time(22, 0)
+DAW_CLOSING = time(21, 0)
+
+# --- STYLE CSS (Inspiration de ton ancien apply_custom_style) ---
 st.markdown("""
     <style>
-    .main { background-color: #f0f2f6; }
-    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-    .closed-status { color: #ff4b4b; font-weight: bold; }
-    .open-status { color: #28a745; font-weight: bold; }
+    .ride-card {
+        padding: 1.5rem;
+        border-radius: 0.8rem;
+        margin-bottom: 1rem;
+        border-left: 8px solid;
+    }
+    .status-open { border-left-color: #28a745; background-color: #f8fff9; }
+    .status-closed { border-left-color: #dc3545; background-color: #fff8f8; }
+    .status-incident { border-left-color: #ffc107; background-color: #fffdf5; }
+    .wait-time { font-size: 2rem; font-weight: bold; color: #1f2937; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- LOGIQUE DE RÉCUPÉRATION DES DONNÉES ---
-@st.cache_data(ttl=60)  # Mise à jour toutes les 60 secondes
-def fetch_park_data(park_id):
+# --- FONCTIONS DE DONNÉES ---
+@st.cache_data(ttl=60)
+def fetch_disney_data(park_id):
     url = f"https://queue-times.com/parks/{park_id}/queue_times.json"
     try:
-        response = requests.get(url)
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
+        res = requests.get(url)
+        return res.json()
+    except:
         return None
 
-def process_data(data):
-    all_rides = []
-    for land in data.get('lands', []):
-        for ride in land.get('rides', []):
-            all_rides.append({
-                "Zone": land['name'],
-                "Attraction": ride['name'],
-                "Attente": ride['wait_time'],
-                "Statut": "Ouvert" if ride['is_open'] else "Interrompu",
-                "Dernière mise à jour": datetime.now().strftime("%H:%M")
-            })
-    return pd.DataFrame(all_rides)
+def get_status_logic(ride, current_time):
+    """Logique de statut inspirée de ton ancien code"""
+    is_open = ride['is_open']
+    wait = ride['wait_time']
+    
+    # Simulation de la logique de fermeture selon le parc (Studios vs Parc)
+    # Dans une version complète, on mapperait chaque ride à son parc
+    limit_h = DLP_CLOSING 
+    
+    if current_time >= limit_h:
+        return "FERMÉ", "card-closed", "🏁 Fermé"
+    elif not is_open:
+        return "PANNE", "status-incident", "⚠️ Interruption"
+    else:
+        return f"{wait} min", "status-open", "✅ Opérationnel"
 
-# --- INTERFACE UTILISATEUR ---
+# --- INTERFACE PRINCIPALE ---
 def main():
-    st.title("🏰 Disney World-Wide Tracker")
-    st.markdown("Suivez les temps d'attente et l'état des attractions en temps réel.")
-
-    # Barre latérale : Sélection du parc
+    now = datetime.now(PARIS_TZ).time()
+    
+    st.title("🏰 Disney Live Board")
+    
+    # Barre latérale : Gestion des Favoris (via Query Params comme dans ton code)
+    if "fav" not in st.query_params:
+        st.query_params["fav"] = []
+    
     with st.sidebar:
-        st.header("Paramètres")
-        destination = st.selectbox("Destination", ["Disneyland Paris", "Walt Disney World (Florida)", "Disneyland Resort (California)"])
+        st.header("📍 Sélection")
+        destination = st.radio("Destination", ["Disneyland Parc", "Walt Disney Studios"])
+        park_id = 4 if destination == "Disneyland Parc" else 28
         
-        # Mapping des IDs de l'API
-        parks_map = {
-            "Disneyland Paris": {"Parc Disneyland": 4, "Walt Disney Studios": 28},
-            "Walt Disney World (Florida)": {"Magic Kingdom": 6, "Epcot": 5, "Hollywood Studios": 7, "Animal Kingdom": 8},
-            "Disneyland Resort (California)": {"Disneyland Park": 16, "California Adventure": 17}
-        }
-        
-        selected_park_name = st.selectbox("Parc spécifique", list(parks_map[destination].keys()))
-        park_id = parks_map[destination][selected_park_name]
-        
-        if st.button("🔄 Actualiser les données"):
+        st.divider()
+        if st.button("🔄 Forcer la mise à jour"):
             st.cache_data.clear()
+            st.rerun()
 
     # Récupération des données
-    with st.spinner('Récupération de la magie en cours...'):
-        raw_data = fetch_park_data(park_id)
-
-    if raw_data:
-        df = process_data(raw_data)
+    data = fetch_disney_data(park_id)
+    
+    if data:
+        all_rides = []
+        for land in data['lands']:
+            for ride in land['rides']:
+                ride['land_name'] = land['name']
+                all_rides.append(ride)
         
-        # --- RÉSUMÉ (METRICS) ---
-        total_open = len(df[df['Statut'] == "Ouvert"])
-        total_closed = len(df[df['Statut'] == "Interrompu"])
-        # On calcule la moyenne seulement s'il y a des attractions ouvertes
-        open_rides = df[df['Statut'] == "Ouvert"]
-        
-        if not open_rides.empty:
-            avg_wait = int(open_rides['Attente'].mean())
-        else:
-            avg_wait = 0 # Ou une autre valeur par défaut si tout est fermé
+        df = pd.DataFrame(all_rides)
 
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Attractions Ouvertes", f"{total_open}/{len(df)}")
-        m2.metric("Temps d'attente moyen", f"{avg_wait} min")
-        m3.metric("Interruptions", total_closed, delta_color="inverse")
+        # --- FILTRES RAPIDES ---
+        fav_list = st.multiselect(
+            "⭐ Vos attractions favorites", 
+            options=df['name'].unique(),
+            default=[f for f in st.query_params.get_all("fav") if f in df['name'].values]
+        )
+        st.query_params["fav"] = fav_list
 
-        # --- ALERTES INTERRUPTIONS ---
-        if total_closed > 0:
-            with st.expander("⚠️ Liste des attractions actuellement interrompues"):
-                closed_list = df[df['Statut'] == "Interrompu"]['Attraction'].tolist()
-                for ride in closed_list:
-                    st.write(f"❌ {ride}")
+        # --- AFFICHAGE ---
+        display_list = df[df['name'].isin(fav_list)] if fav_list else df
 
-        # --- VISUALISATION ---
+        # Stats rapides
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Ouvertes", len(df[df['is_open']]))
+        c2.metric("En Panne", len(df[~df['is_open']]))
+        c3.metric("Attente Moyenne", f"{int(df[df['is_open']]['wait_time'].mean())} min")
+
         st.divider()
-        col_left, col_right = st.columns([2, 1])
 
-        with col_left:
-            st.subheader("📊 Top 10 des temps d'attente")
-            # Graphique des temps d'attente
-            top_10 = df[df['Statut'] == "Ouvert"].nlargest(10, 'Attente')
-            fig = px.bar(top_10, x='Attente', y='Attraction', orientation='h', 
-                         color='Attente', color_continuous_scale='Reds',
-                         labels={'Attente': 'Minutes', 'Attraction': ''})
-            fig.update_layout(yaxis={'categoryorder':'total ascending'}, height=400)
+        # Grille d'affichage
+        cols = st.columns(2)
+        for idx, row in display_list.iterrows():
+            with cols[idx % 2]:
+                label, style_class, sub_text = get_status_logic(row, now)
+                
+                st.markdown(f"""
+                    <div class="ride-card {style_class}">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h3 style="margin:0;">{row['name']}</h3>
+                                <small>{row['land_name']} • {sub_text}</small>
+                            </div>
+                            <div class="wait-time">{label}</div>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+
+        # --- ANALYSE GRAPHIQUE ---
+        if not fav_list:
+            st.subheader("📈 Top 10 des attentes")
+            top_df = df[df['is_open']].nlargest(10, 'wait_time')
+            fig = px.bar(top_df, x='wait_time', y='name', orientation='h', 
+                         color='wait_time', color_continuous_scale='RdYlGn_r')
             st.plotly_chart(fig, use_container_width=True)
 
-        with col_right:
-            st.subheader("📋 Liste complète")
-            # Filtre par zone
-            selected_land = st.multiselect("Filtrer par zone", df['Zone'].unique())
-            display_df = df if not selected_land else df[df['Zone'].isin(selected_land)]
-            
-            # Affichage du tableau
-            st.dataframe(
-                display_df[['Attraction', 'Attente', 'Statut']],
-                hide_index=True,
-                use_container_width=True
-            )
-
     else:
-        st.error("Impossible de récupérer les données. Vérifiez votre connexion ou réessayez plus tard.")
-
-    # --- FOOTER ---
-    st.divider()
-    st.caption(f"Données fournies par Queue-Times.com • Dernière synchro : {datetime.now().strftime('%H:%M:%S')}")
+        st.error("Impossible de joindre les serveurs Disney.")
 
 if __name__ == "__main__":
     main()
