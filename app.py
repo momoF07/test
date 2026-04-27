@@ -60,7 +60,7 @@ def main():
     <style>
     /* Change le fond de la zone principale */
     .stApp {
-        background-color: #f0f2f6; /* Remplace par ta couleur (ex: #003399 pour un bleu Disney) */
+        background-color: #003399;
     }
     
     /* Change aussi le fond de la barre latérale si besoin */
