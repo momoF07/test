@@ -56,6 +56,20 @@ def fetch_park_data(park_id):
         return None
 
 def main():
+    st.markdown("""
+    <style>
+    /* Change le fond de la zone principale */
+    .stApp {
+        background-color: #f0f2f6; /* Remplace par ta couleur (ex: #003399 pour un bleu Disney) */
+    }
+    
+    /* Change aussi le fond de la barre latérale si besoin */
+    [data-testid="stSidebar"] {
+        background-color: #ffffff;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
     st.title("🏰 Disney World-Wide Live Board")
 
     # --- BARRE LATÉRALE DE SÉLECTION ---
