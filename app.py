@@ -145,4 +145,15 @@ def main():
         if total_open > 0:
             st.write("---")
             st.subheader("📈 Top 10 des attentes")
-            top_df = open_rides.nlargest(
+            top_df = open_rides.nlargest(10, 'wait_time')
+            fig = px.bar(top_df, x='wait_time', y='name', orientation='h', 
+                         color='wait_time', color_continuous_scale='Reds',
+                         labels={'wait_time': 'Minutes', 'name': ''})
+            fig.update_layout(yaxis={'categoryorder':'total ascending'})
+            st.plotly_chart(fig, use_container_width=True)
+
+    else:
+        st.error("❌ Erreur de récupération des données Queue-Times.")
+
+if __name__ == "__main__":
+    main()
